@@ -97,14 +97,14 @@ class ListFrame(wx.Frame):
 
     def refresh(self, key = lambda x:-x.addTime):
         # make a copy
-        self.voc = self.vocabulary.vocabulary[0:]
+        self.voc = self.vocabulary.vocabulary[:]
         self.voc.sort(key = key)
         for i in range(len(self.voc)):
             self.showLine(i, self.voc[i])
 
     def showLine(self, row, word):
         self.wordlist.SetStringItem(row, 0, word.word)
-        self.wordlist.SetStringItem(row, 1, str(word.level) + ' ')
+        self.wordlist.SetStringItem(row, 1, f'{str(word.level)} ')
         self.wordlist.SetStringItem(row, 2, str(word.right))
         self.wordlist.SetStringItem(row, 3, str(word.wrong))
         self.wordlist.SetStringItem(row, 4, str(word.right - word.wrong))
@@ -258,7 +258,7 @@ class MainFrame(wx.Frame):
 
 
         length = self.vocabulary.updateQueue()
-        self.remainText.SetLabel(u'还剩 ' + str(length) + u' 个')
+        self.remainText.SetLabel(f'还剩 {str(length)} 个')
 
         # no words in review queue
         if length == 0:
@@ -266,7 +266,7 @@ class MainFrame(wx.Frame):
                     wx.OK)
             self.state = 'home'
             return
- 
+
         self.nowlist = self.vocabulary.getQueueFront(self.WORD_NUM)
         self.isForgotten = [False] * self.WORD_NUM
         self.forgetFirstTime = []
@@ -324,7 +324,7 @@ class MainFrame(wx.Frame):
         #------------- redraw -----------#
         self.cleanPage()
         length = self.vocabulary.updateQueue()
-        self.remainText.SetLabel(u'还剩 ' + str(length) + u' 个')
+        self.remainText.SetLabel(f'还剩 {str(length)} 个')
 
         if length > 0:
             self.nowlist = self.vocabulary.getQueueFront(self.WORD_NUM)
@@ -339,8 +339,8 @@ class MainFrame(wx.Frame):
 
     def showInit(self):
         for i in range(len(self.nowlist)):
-            word = self.vocabulary.maplist[self.nowlist[i]]
             if self.config['show']['word']:
+                word = self.vocabulary.maplist[self.nowlist[i]]
                 self.wordTexts[i].SetLabel(word.word)
 
     def cleanPage(self):
@@ -352,7 +352,7 @@ class MainFrame(wx.Frame):
         self.indicate[self.now].SetLabel('')
 
     def getPos(self, pos):
-        return pos if pos < 16 else 16
+        return min(pos, 16)
 
     def showWord(self):
         word = self.vocabulary.maplist[self.nowlist[self.now]]
@@ -360,15 +360,19 @@ class MainFrame(wx.Frame):
 
         strlist = []
         if res:
-            strlist.append(res[3]) # meaning
-            strlist.append('')     # 
-            strlist.append(res[4] if res[4] else 'Haha!') # sentence
-            strlist.append('')     # 
-            strlist.append('  '.join((res[1], res[2]))) # phonetic
-            strlist.append(word.toString())
+            strlist.extend(
+                (
+                    res[3],
+                    '',
+                    res[4] if res[4] else 'Haha!',
+                    '',
+                    '  '.join((res[1], res[2])),
+                    word.toString(),
+                )
+            )
         else:
             strlist.append("Error")
-            
+
         self.detail[self.getPos(self.now)].SetLabel('\n'.join(strlist))
         self.detail[self.getPos(self.now)].Wrap(self.GetSize().width / 1.5)
         self.wordTexts[self.now].SetLabel(word.word)
@@ -505,6 +509,9 @@ class MainFrame(wx.Frame):
 ##          ADD WORDS
 ##
     def onAddWords(self, e):
+
+
+
         class AddWordDialog(wx.Dialog):
             bookList = ("CET4", "CET6", "TOELF")
             def __init__(self, vocabulary):
@@ -559,6 +566,7 @@ class MainFrame(wx.Frame):
 
                 # bind event
                 self.Bind(wx.EVT_BUTTON, self.onQuickAdd, addButton)
+
             def GetValue(self):
                 return self.multiText.GetValue()
 
@@ -567,22 +575,21 @@ class MainFrame(wx.Frame):
                 number = int(self.numText.GetValue())
 
                 newWords = ''
-                f = open("list\\" + book + ".txt")
-                ct = 0
-                wordList = f.readlines()
-                random.shuffle(wordList)
-                for word in wordList:
-                    if ct >= number:
-                        break
+                with open("list\\" + book + ".txt") as f:
+                    ct = 0
+                    wordList = f.readlines()
+                    random.shuffle(wordList)
+                    for word in wordList:
+                        if ct >= number:
+                            break
 
-                    word = word.strip()
-                    if word != '' and (word not in self.vocabulary):
-                        newWords += word + '\n'
-                        ct += 1
+                        word = word.strip()
+                        if word != '' and (word not in self.vocabulary):
+                            newWords += word + '\n'
+                            ct += 1
 
-                self.multiText.SetValue(self.multiText.GetValue() + newWords)
+                    self.multiText.SetValue(self.multiText.GetValue() + newWords)
 
-                f.close()
 
         class ReportDialog(wx.Dialog):
             def __init__(self, vocabulary, wordlist, dictObj):
@@ -621,7 +628,7 @@ class MainFrame(wx.Frame):
                 self.timer = wx.Timer(self)
                 self.Bind(wx.EVT_TIMER, self.startAdd, self.timer)
                 self.timer.Start(0)
- 
+
             def startAdd(self, e):
                 # add words
                 self.timer.Stop()
@@ -639,13 +646,7 @@ class MainFrame(wx.Frame):
 
         if dialog.ShowModal() == wx.ID_OK:
             rawlist = dialog.GetValue().split('\n')
-            wordlist = []
-
-            # delete space line
-            for line in rawlist:
-                if line.strip():
-                    wordlist.append(line)
-
+            wordlist = [line for line in rawlist if line.strip()]
             reportDialog = ReportDialog(self.vocabulary, wordlist,
                                                             self.dictionary)
             reportDialog.ShowModal()

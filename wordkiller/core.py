@@ -61,21 +61,13 @@ class Word:
 
     # return whether the word match the condition to review
     def match(self, interval):
-        if self.level < 0: level = 0
-        else:              level = self.level
-
+        level = max(self.level, 0)
         now = time.time()
-        if now - self.lastTime > interval[level]:
-            return True
-        else:
-            return False
+        return now - self.lastTime > interval[level]
 
     # use DP algorithm
     def calcEditDist(self, a, b):
-        f = []
-        for i in range(len(b)+1):
-            f.append(i)
-
+        f = list(range(len(b)+1))
         for i in range(1, len(a)+1):
             last = f[0]
             f[0] = i
@@ -84,10 +76,8 @@ class Word:
                 if (a[i-1] != b[j-1]):
                     res += 1
                 res += last
-                if (res > f[j - 1] + 1):
-                    res = f[j - 1] + 1
-                if (res > f[j] + 1):
-                    res = f[j] + 1
+                res = min(res, f[j - 1] + 1)
+                res = min(res, f[j] + 1)
                 last = f[j]
                 f[j] = res
 
@@ -99,38 +89,12 @@ class Word:
 
         # common edit dist
         dist = self.calcEditDist(self.word, word)
-        if dist <= min(5, max(len(word), len(self.word)) * factor):
-            return True
-        return False
-
-        # for some prefix and postfix occasions
-        '''
-        i = j = 0
-        length = min(len(self.word), len(word))
-
-        while i < length and self.word[i] == word[i]:
-            i += 1
-        while j < length and self.word[-j-1] == word[-j-1]:
-            j += 1
-
-        if i * j != 0 and (1.0 * min(len(self.word), len(word)) /
-                                max(i, j) > 1 - factor / 2):
-            return True
-
-        return False
-        #return 1.0 * (i + j) / ((len(self.word)+len(word)) / 2) > 0.7
-        '''
+        return dist <= min(5, max(len(word), len(self.word)) * factor)
 
     def toString(self):
         res = '   '.join(('level:', str(self.level),
             'right:', str(self.right), 'wrong:', str(self.wrong)))
-        res = ''.join( (res, '\n', self.record ,'\n') )
-        return res
-
-        '''
-        strlist.append('   '.join(('last:', easyTime(self.lastTime)+' ago')))
-        strlist.append('   '.join(('add:', easyTime(self.addTime)+' ago')))
-        '''
+        return ''.join( (res, '\n', self.record ,'\n') )
 
     def printSelf(self):
         print 'level:', self.level
@@ -293,14 +257,13 @@ class VocabularyBook:
         return len(self.reviewQueue)
 
     def getQueueFront(self, n):
-        if n > len(self.reviewQueue):
-            n = len(self.reviewQueue) 
-        ret = self.reviewQueue[0:n]
+        n = min(n, len(self.reviewQueue))
+        ret = self.reviewQueue[:n]
         random.shuffle(ret)
         return ret
 
     def popQueueFront(self, n):
-        del self.reviewQueue[0:n]
+        del self.reviewQueue[:n]
 
     def forcePushQueue(self, word):
         if word in self.maplist:
@@ -313,26 +276,25 @@ class VocabularyBook:
     def addWord(self, word):
         if word in self.maplist:
             # print 'ERROR:', word, 'existed already'
-            return 'ERROR:' + word + ' existed already\n'
+            return f'ERROR:{word}' + ' existed already\n'
 
-        if self.dictObj.db == None:
-            return 'ERROR: cannot open file ' + self.dictObj.dictname + '\n'
+        if self.dictObj.db is None:
+            return f'ERROR: cannot open file {self.dictObj.dictname}' + '\n'
 
-        ret = self.dictObj.getword(word)
-        if ret:
-            self.db.execute('INSERT INTO vocabulary VALUES (?' + ',?'*8 + ')',
-                (ret.word,  ret.right, ret.wrong, ret.record, ret.level,
-                 ret.addTime, ret.lastTime, ret.nextTime,
-                 1 if ret.inWrong else 0))
-            self.db.commit()
+        if not (ret := self.dictObj.getword(word)):
+            return f"ERROE: cannot find word '{word}" + (
+                f"' in {self.dictObj.dictname}" + '\n'
+            )
+        self.db.execute('INSERT INTO vocabulary VALUES (?' + ',?'*8 + ')',
+            (ret.word,  ret.right, ret.wrong, ret.record, ret.level,
+             ret.addTime, ret.lastTime, ret.nextTime,
+             1 if ret.inWrong else 0))
+        self.db.commit()
 
-            self.vocabulary.append(ret)
-            self.maplist[word] = self.vocabulary[-1]
+        self.vocabulary.append(ret)
+        self.maplist[word] = self.vocabulary[-1]
             # print 'add', word
-            return 'add ' + word + '\n'
-        else:
-            return "ERROE: cannot find word '" + word + ("' in " + 
-                                        self.dictObj.dictname + '\n')
+        return f'add {word}' + '\n'
 
     def startAddMany(self, dictObj):
         self.dictObj = dictObj
@@ -405,19 +367,13 @@ class Dictionary:
             return None
 
     def lookUp(self, word):
-        row = self.db.execute('SELECT word, phonetic_us, phonetic_uk,'
-                'meaning, sentence FROM dictionary WHERE word="'
-                + word + '"').fetchone()
-
-        return row
+        return self.db.execute(
+            f'SELECT word, phonetic_us, phonetic_uk,meaning, sentence FROM dictionary WHERE word="{word}"'
+        ).fetchone()
 
     def getlist(self):
         cursor = self.db.execute( 'SELECT word FROM dictionary' )
-        res = []
-        for row in cursor:
-            res.append(row[0])
-
-        return res
+        return [row[0] for row in cursor]
 
     def __del__(self):
         self.db.close()
